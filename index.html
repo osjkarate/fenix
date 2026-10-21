@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bass Fretboard Triad Quiz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+        .fret-cell {
+            position: relative;
+            box-sizing: border-box;
+            transition: background-color 0.15s ease;
+            container-type: size;
+        }
+        .fret-cell:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        .dynamic-dot {
+            width: clamp(4px, 25cqmin, 12px);
+            height: clamp(4px, 25cqmin, 12px);
+        }
+        .selected-dot {
+            width: clamp(12px, 58cqmin, 30px);
+            height: clamp(12px, 58cqmin, 30px);
+        }
+    </style>
+</head>
+<body class="bg-[#0d0f12] text-zinc-100 flex flex-col justify-between p-2 sm:p-4 font-sans antialiased selection:bg-zinc-700 selection:text-white h-full overflow-hidden select-none">
+
+    <!-- Main Content Card -->
+    <main class="w-full max-w-[90rem] mx-auto flex flex-col items-center justify-center flex-grow py-1">
+
+        <!-- Fretboard Container -->
+        <div class="w-full flex justify-center my-auto">
+            <div class="bg-[#14171f] p-2 sm:p-4 rounded-xl border border-zinc-800 relative select-none w-full max-w-[98vw] sm:max-w-[95vw]">
+
+                <!-- Fret Numbers Row -->
+                <div id="fret-numbers" class="grid mb-1 text-[9px] sm:text-xs text-zinc-300 font-mono font-bold select-none ml-7 sm:ml-12">
+                    <!-- Injected via JS -->
+                </div>
+
+                <div class="flex">
+                    <!-- Interactive String Labels (G, D, A, E) -->
+                    <div id="string-labels" class="flex flex-col justify-around mr-1.5 sm:mr-4 font-mono text-xs sm:text-sm select-none">
+                        <!-- Injected via JS -->
+                    </div>
+
+                    <!-- Fretboard Grid Wrapper -->
+                    <div class="relative flex-grow overflow-hidden w-full aspect-[20/4] max-h-[300px]">
+                        <!-- Fretboard Grid -->
+                        <div id="fretboard-grid" class="absolute inset-0 grid rounded-lg overflow-hidden border border-zinc-700 bg-[#101319]">
+                            <!-- Injected via JS -->
+                        </div>
+                        <!-- Fret Markers Overlay -->
+                        <div id="fret-markers-overlay" class="absolute inset-0 pointer-events-none grid rounded-lg overflow-hidden z-0">
+                            <!-- Injected via JS -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+                <!-- Prompt Box -->
+        <div class="text-center mb-1 sm:mb-2">
+            <p id="key-badge2" class="text-[30px] tracking-widest text-emerald-400 mb-0.5 font-mono font-semibold">Key: C Major</p>
+            <p id="key-badge" class="text-[10px] uppercase tracking-widest text-zinc-400 mb-0.5 font-mono font-semibold">Key: C Major</p>
+            <h2 id="target-name" class="text-sm sm:text-lg font-semibold text-zinc-400 mb-1">Loading...</h2>
+            <div id="string-prompt" class="text-[10px] sm:text-xs font-mono uppercase tracking-wider text-zinc-400 bg-zinc-900 py-0.5 px-2 sm:px-3 rounded border border-zinc-800">
+                Next Note: E String (Fret 0)
+            </div>
+        </div>
+
+        <!-- Key Progress Bar -->
+        <div id="progress-bar" class="w-full max-w-[98vw] sm:max-w-[95vw] mx-auto flex flex-wrap justify-center gap-1 my-1 sm:my-2 px-2 font-mono text-[9px] sm:text-xs">
+            <!-- Injected via JS -->
+        </div>
+
+        <!-- Feedback Message -->
+        <div id="feedback" class="text-center text-xs sm:text-sm font-medium h-4 sm:h-5 tracking-wide font-mono"></div>
+
+        <!-- Action Buttons -->
+        <div class="mt-0.5 flex gap-4">
+            <button id="next-btn" class="hidden bg-zinc-100 hover:bg-white text-zinc-950 font-semibold px-4 py-1.5 rounded transition-all text-xs tracking-wider uppercase font-mono">
+                Next Shape
+            </button>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer id="footer-text" class="w-full max-w-[90rem] mx-auto text-center text-[9px] sm:text-xs text-zinc-500 border-t border-zinc-900 pt-1 font-mono">
+    </footer>
+
+<script>
+    const MAX_ALLOWED_FRET = 20;
+    const stringNames = ['G', 'D', 'A', 'E'];
+    const stringLabels = { 3: 'E String', 2: 'A String', 1: 'D String', 0: 'G String' };
+    const totalFrets = 20;
+
+    // Helper to automatically compute lowest E and highest G for sorting/labeling
+    function processInversions(inversionsArr) {
+        return inversionsArr.map(inv => {
+            let eFrets = inv.correctNotes[3] || [];
+            let lowestE = eFrets.length > 0 ? Math.min(...eFrets) : 999;
+            let gFrets = inv.correctNotes[0] || [];
+            let highestG = gFrets.length > 0 ? Math.max(...gFrets) : -1;
+
+            return {
+                ...inv,
+                lowestE,
+                highestG
+            };
+        });
+    }
+
+    // Manual, hard-coded definitions for all keys and their 1 (Major), 6 (Minor), 7 (Diminished) triads
+    // Each chord contains an array of inversions (up to 4 if space permits on the 20-fret board).
+    // Structure per inversion: { nameAsc, nameDesc, correctNotes: { 3: [...], 2: [...], 1: [...], 0: [...] } }
+    // String indices: 3 = E string, 2 = A string, 1 = D string, 0 = G string.
+    const quizKeys = [
+        {
+            keyName: 'C Major',
+            chords: [
+                // 1: C Major
+                { chord: 'C Major', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [0, 3], 2: [3], 1: [2, 5], 0: [5] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [3, 8], 2: [7], 1: [5, 10], 0: [9] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [8, 12], 2: [10], 1: [10, 14], 0: [12] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [12, 15], 2: [15], 1: [14, 17], 0: [17] } }
+                ])},
+                // 6: A Minor
+                { chord: 'A Minor', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [0, 5], 2: [3], 1: [2, 7], 0: [5] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [5, 8], 2: [7], 1: [7, 10], 0: [9] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [8, 12], 2: [12], 1: [10, 14], 0: [14] } },
+                    { nameAsc: 'Second Inversion (Octave)', nameDesc: 'Second Inversion (Octave)', correctNotes: { 3: [12, 17], 2: [15], 1: [14, 19], 0: [17] } }
+                ])},
+                // 7: B Diminished
+                { chord: 'B Diminished', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [1, 7], 2: [5], 1: [3, 9], 0: [7] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [7, 10], 2: [8], 1: [9, 12], 0: [10] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [10, 13], 2: [14], 1: [12, 15], 0: [16] } },
+                ])}
+            ]
+        },
+        {
+            keyName: 'F Major',
+            chords: [
+                { chord: 'F Major', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [1, 5], 2: [3], 1: [3, 7], 0: [5] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [5, 8], 2: [8], 1: [7, 10], 0: [10] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [8, 13], 2: [12], 1: [10, 15], 0: [14] } },
+                    { nameAsc: 'Root Position (Octave)', nameDesc: 'Root Position (Octave)', correctNotes: { 3: [13, 17], 2: [15], 1: [15, 19], 0: [17]
+ } }
+                ])},
+                { chord: 'D Minor', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [1, 5], 2: [5], 1: [3, 7], 0: [7] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [5, 10], 2: [8], 1: [7, 12], 0: [10] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [10, 13], 2: [12], 1: [12, 15], 0: [14] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [13, 17], 2: [17], 1: [15, 19], 0: [19] } }
+                ])},
+                { chord: 'E Diminished', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [0, 3], 2: [1], 1: [2, 5], 0: [3] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [3, 6], 2: [7], 1: [5, 8], 0: [9] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [6, 12], 2: [10], 1: [8, 14], 0: [12] } },
+                    { nameAsc: 'Root Position (Octave)', nameDesc: 'Root Position (Octave)', correctNotes: { 3: [12, 15], 2: [13], 1: [14, 17], 0: [15] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'Bb Major',
+            chords: [
+                { chord: 'Bb Major', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [1, 6], 2: [5], 1: [3, 8], 0: [7] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [6, 10], 2: [8], 1: [8, 12], 0: [10] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [10, 13], 2: [13], 1: [12, 15], 0: [15] } },
+                    { nameAsc: 'Second Inversion (Octave)', nameDesc: 'Second Inversion (Octave)', correctNotes: { 3: [13, 18], 2: [17], 1: [15, 20], 0: [19] } }
+                ])},
+                { chord: 'G Minor', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [3, 6], 2: [5], 1: [5, 8], 0: [7] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [6, 10], 2: [10], 1: [8, 12], 0: [12] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [10, 15], 2: [13], 1: [12, 17], 0: [15] } },
+                    { nameAsc: 'Root Position (Octave)', nameDesc: 'Root Position (Octave)', correctNotes: { 3: [15, 18], 2: [17], 1: [17, 20], 0: [19] } }
+                ])},
+                { chord: 'A Diminished', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [5, 8], 2: [6], 1: [7, 10], 0: [8] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [8, 11], 2: [12], 1: [10, 13], 0: [14] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [11, 17], 2: [15], 1: [13, 19], 0: [17] } },
+                ])}
+            ]
+        },
+        {
+            keyName: 'Eb Major',
+            chords: [
+                { chord: 'Eb Major', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [3, 6], 2: [6], 1: [5, 8], 0: [8] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [6, 11], 2: [10], 1: [8, 13], 0: [12] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [11, 15], 2: [13], 1: [13, 17], 0: [15] } },
+                    { nameAsc: 'Fourth Inversion (Octave)', nameDesc: 'Fourth Inversion (Octave)', correctNotes: { 3: [15, 18], 2: [18], 1: [17, 20], 0: [20] } }
+                ])},
+                { chord: 'C Minor', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [3, 8], 2: [6], 1: [5, 10], 0: [8] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [8, 11], 2: [10], 1: [10, 13], 0: [12] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [11, 15], 2: [15], 1: [13, 17], 0: [17] } },
+                ])},
+                { chord: 'D Diminished', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [1, 4], 2: [5], 1: [3, 6], 0: [7] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [4, 10], 2: [8], 1: [6, 12], 0: [10] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [10, 13], 2: [11], 1: [12, 15], 0: [13] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [13, 16], 2: [17], 1: [15, 18], 0: [19] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'Ab Major',
+            chords: [
+                { chord: 'Ab Major', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [4, 8], 2: [6], 1: [6, 10], 0: [8] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [8, 11], 2: [11], 1: [10, 13], 0: [13] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [11, 16], 2: [15], 1: [13, 18], 0: [16] } },
+                    { nameAsc: 'Fourth Inversion (Octave)', nameDesc: 'Fourth Inversion (Octave)', correctNotes: { 3: [16, 20], 2: [18], 1: [18, 20], 0: [20] } }
+                ])},
+                { chord: 'F Minor', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [1, 8], 2: [6], 1: [3, 10], 0: [8] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [8, 13], 2: [11], 1: [10, 15], 0: [13] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [13, 16], 2: [15], 1: [15, 18], 0: [16] } },
+                    { nameAsc: 'Fourth Inversion (Octave)', nameDesc: 'Fourth Inversion (Octave)', correctNotes: { 3: [16, 20], 2: [20], 1: [18, 20], 0: [20] } }
+                ])},
+                { chord: 'G Diminished', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [3, 10], 2: [7], 1: [5, 12], 0: [10] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [10, 13], 2: [11], 1: [12, 14], 0: [13] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [13, 15], 2: [16], 1: [14, 18], 0: [18] } },
+                    { nameAsc: 'Fourth Inversion (Octave)', nameDesc: 'Fourth Inversion (Octave)', correctNotes: { 3: [15, 20], 2: [19], 1: [18, 20], 0: [20] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'Db Major',
+            chords: [
+                { chord: 'Db Major', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [1, 4], 2: [4], 1: [3, 6], 0: [6] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [4, 9], 2: [8], 1: [6, 11], 0: [10] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [9, 13], 2: [11], 1: [11, 15], 0: [13] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [13, 16], 2: [16], 1: [15, 18], 0: [18] } }
+
+                ])},
+                { chord: 'Bb Minor', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [1, 6], 2: [4], 1: [3, 8], 0: [6] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [6, 9], 2: [8], 1: [8, 11], 0: [10] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [9, 13], 2: [13], 1: [11, 15], 0: [15] } },
+                    { nameAsc: 'Second Inversion (Octave)', nameDesc: 'Second Inversion (Octave)', correctNotes: { 3: [13, 18], 2: [16], 1: [15, 20], 0: [18] } }
+                ])},
+                { chord: 'C Diminished', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [2, 8], 2: [6], 1: [4, 10], 0: [8] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [8, 11], 2: [9], 1: [10, 13], 0: [11] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [11, 14], 2: [15], 1: [13, 16], 0: [17] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'Gb Major',
+            chords: [
+                { chord: 'Gb Major', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [2, 6], 2: [4], 1: [4, 8], 0: [6] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [6, 9], 2: [9], 1: [8, 11], 0: [11] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [9, 14], 2: [13], 1: [11, 16], 0: [15] } },
+                    { nameAsc: 'Root Position (Octave)', nameDesc: 'Root Position (Octave)', correctNotes: { 3: [14, 18], 2: [16], 1: [16, 20], 0: [18] } }
+                ])},
+
+                { chord: 'Eb Minor', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [2, 6], 2: [6], 1: [4, 8], 0: [8] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [6, 11], 2: [9], 1: [8, 13], 0: [11] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [11, 14], 2: [13], 1: [13, 16], 0: [15] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [14, 18], 2: [18], 1: [16, 20], 0: [20] } }
+
+                ])},
+                { chord: 'F Diminished', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [1, 4], 2: [2], 1: [3, 6], 0: [4] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [12, 15], 2: [14], 1: [14, 17], 0: [15] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [15, 19], 2: [19], 1: [17, 20], 0: [20] } },
+                    { nameAsc: 'Root Position (Octave)', nameDesc: 'Root Position (Octave)', correctNotes: { 3: [1, 4], 2: [2], 1: [3, 6], 0: [4] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'Cb Major',
+            chords: [
+                { chord: 'Cb Major', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [2, 7], 2: [6], 1: [4, 9], 0: [8] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [7, 11], 2: [9], 1: [9, 13], 0: [11] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [11, 14], 2: [14], 1: [13, 16], 0: [16] } }
+                ])},
+                { chord: 'Ab Minor', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Second Inversion', correctNotes: { 3: [4, 7], 2: [6], 1: [6, 9], 0: [8] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [7, 11], 2: [11], 1: [9, 13], 0: [13] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [11, 16], 2: [14], 1: [13, 18], 0: [16] } }
+                ])},
+                { chord: 'Bb Diminished', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [0, 6], 2: [4], 1: [2, 8], 0: [6] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [6, 9], 2: [8], 1: [8, 11], 0: [10] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [9, 12], 2: [13], 1: [11, 14], 0: [15] } },
+                    { nameAsc: 'Second Inversion (Octave)', nameDesc: 'Second Inversion (Octave)', correctNotes: { 3: [12, 18], 2: [16], 1: [14, 20], 0: [18] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'C# Major',
+            chords: [
+                { chord: 'C# Major', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [1, 4], 2: [4], 1: [3, 6], 0: [6] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [4, 9], 2: [8], 1: [6, 11], 0: [10] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [9, 13], 2: [11], 1: [11, 15], 0: [13] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [13, 16], 2: [16], 1: [15, 18], 0: [18] } }
+                ])},
+                { chord: 'A# Minor', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [1, 6], 2: [4], 1: [3, 8], 0: [6] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [6, 9], 2: [8], 1: [8, 11], 0: [10] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [9, 13], 2: [13], 1: [11, 15], 0: [15] } },
+                    { nameAsc: 'Second Inversion (Octave)', nameDesc: 'Second Inversion (Octave)', correctNotes: { 3: [13, 18], 2: [16], 1: [15, 20], 0: [18] } }
+                ])},
+                { chord: 'B# Diminished', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [2, 8], 2: [6], 1: [4, 10], 0: [8] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [8, 11], 2: [9], 1: [10, 13], 0: [11] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [11, 14], 2: [15], 1: [13, 16], 0: [17] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'F# Major',
+            chords: [
+                { chord: 'F# Major', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [2, 6], 2: [4], 1: [4, 8], 0: [6] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [6, 9], 2: [9], 1: [8, 11], 0: [11] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [9, 14], 2: [13], 1: [11, 16], 0: [15] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [14, 18], 2: [16], 1: [16, 20], 0: [18] } }
+                ])},
+                { chord: 'D# Minor', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [2, 6], 2: [6], 1: [4, 8], 0: [8] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [6, 11], 2: [9], 1: [8, 13], 0: [11] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [11, 14], 2: [13], 1: [13, 16], 0: [15] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [14, 18], 2: [18], 1: [16, 20], 0: [20] } }
+                ])},
+                { chord: 'E# Diminished', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [1, 4], 2: [2], 1: [3, 6], 0: [4] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [4, 7], 2: [8], 1: [6, 9], 0: [10] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [7, 13], 2: [11], 1: [9, 15], 0: [13] } },
+                    { nameAsc: 'Root Position (Octave)', nameDesc: 'Root Position (Octave)', correctNotes: { 3: [13, 16], 2: [14], 1: [15, 18], 0: [16] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'B Major',
+            chords: [
+                { chord: 'B Major', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [2, 7], 2: [6], 1: [4, 9], 0: [8] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [7, 11], 2: [9], 1: [9, 13], 0: [11] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [11, 14], 2: [14], 1: [13, 16], 0: [16] } }
+                ])},
+                { chord: 'G# Minor', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [4, 7], 2: [6], 1: [6, 9], 0: [8] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [7, 11], 2: [11], 1: [9, 13], 0: [13] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [11, 16], 2: [14], 1: [13, 18], 0: [16] } },
+                ])},
+                { chord: 'A# Diminished', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [0, 6], 2: [4], 1: [2, 8], 0: [6] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [6, 9], 2: [7], 1: [8, 11], 0: [9] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [9, 12], 2: [13], 1: [11, 14], 0: [15] } },
+                    { nameAsc: 'Second Inversion (Octave)', nameDesc: 'Second Inversion (Octave)', correctNotes: { 3: [12, 18], 2: [16], 1: [14, 20], 0: [18] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'E Major',
+            chords: [
+                { chord: 'E Major', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [0, 4], 2: [2], 1: [2, 6], 0: [4] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [4, 7], 2: [7], 1: [6, 9], 0: [9] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [7, 12], 2: [11], 1: [9, 14], 0: [13] } },
+                    { nameAsc: 'Root Position (Octave)', nameDesc: 'Root Position (Octave)', correctNotes: { 3: [12, 16], 2: [14], 1: [14, 18], 0: [16] } }
+                ])},
+                { chord: 'C# Minor', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [0, 4], 2: [4], 1: [2, 6], 0: [6] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [4, 9], 2: [7], 1: [6, 11], 0: [9] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [9, 12], 2: [11], 1: [11, 14], 0: [13] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [12, 16], 2: [16], 1: [14, 18], 0: [18] } }
+                ])},
+                { chord: 'D# Diminished', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [2, 5], 2: [6], 1: [4, 7], 0: [8] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [5, 11], 2: [9], 1: [7, 13], 0: [11] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [11, 14], 2: [12], 1: [13, 16], 0: [14] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [14, 17], 2: [18], 1: [16, 19], 0: [20] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'A Major',
+            chords: [
+                { chord: 'A Major', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [0, 5], 2: [4], 1: [2, 7], 0: [6] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [5, 9], 2: [7], 1: [7, 11], 0: [9] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [9, 12], 2: [12], 1: [11, 14], 0: [14] } },
+                    { nameAsc: 'Second Inversion (Octave)', nameDesc: 'Second Inversion (Octave)', correctNotes: { 3: [12, 17], 2: [16], 1: [14, 19], 0: [18] } }
+                ])},
+                { chord: 'F# Minor', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [2, 5], 2: [4], 1: [4, 7], 0: [6] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [5, 9], 2: [9], 1: [7, 11], 0: [11] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [9, 14], 2: [12], 1: [11, 16], 0: [14] } },
+                    { nameAsc: 'Root Position (Octave)', nameDesc: 'Root Position (Octave)', correctNotes: { 3: [14, 17], 2: [16], 1: [16, 19], 0: [18] } }
+                ])},
+                { chord: 'G# Diminished', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [4, 7], 2: [5], 1: [6, 9], 0: [7] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [7, 10], 2: [11], 1: [9, 12], 0: [13] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [10, 16], 2: [14], 1: [12, 18], 0: [16] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'D Major',
+            chords: [
+                { chord: 'D Major', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [2, 5], 2: [5], 1: [4, 7], 0: [7] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [5, 10], 2: [9], 1: [7, 12], 0: [11] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [10, 14], 2: [12], 1: [12, 16], 0: [14] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [14, 17], 2: [17], 1: [16, 19], 0: [19] } }
+                ])},
+                { chord: 'B Minor', inversions: processInversions([
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [2, 7], 2: [5], 1: [4, 9], 0: [7] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [7, 10], 2: [9], 1: [9, 12], 0: [11] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [10, 14], 2: [14], 1: [12, 16], 0: [16] } },
+                ])},
+                { chord: 'C# Diminished', inversions: processInversions([
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [0, 3], 2: [4], 1: [2, 5], 0: [6] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [3, 9], 2: [7], 1: [5, 11], 0: [9] } },
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [9, 12], 2: [11], 1: [11, 14], 0: [13] } },
+                    { nameAsc: 'First Inversion (Octave)', nameDesc: 'First Inversion (Octave)', correctNotes: { 3: [12, 15], 2: [16], 1: [14, 17], 0: [18] } }
+                ])}
+            ]
+        },
+        {
+            keyName: 'G Major',
+            chords: [
+                { chord: 'G Major', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [3, 7], 2: [5], 1: [5, 9], 0: [7] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [7, 10], 2: [10], 1: [9, 12], 0: [12] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [10, 15], 2: [14], 1: [12, 17], 0: [16] } },
+                ])},
+                { chord: 'E Minor', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [0, 3], 2: [2], 1: [2, 5], 0: [4] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [3, 7], 2: [7], 1: [5, 9], 0: [9] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [7, 12], 2: [10], 1: [9, 14], 0: [12] } },
+                    { nameAsc: 'Root Position (Octave)', nameDesc: 'Fourth Inversion (Octave)', correctNotes: { 3: [12, 15], 2: [14], 1: [14, 17], 0: [16] } }
+                ])},
+                { chord: 'F# Diminished', inversions: processInversions([
+                    { nameAsc: 'Root Position', nameDesc: 'Root Position', correctNotes: { 3: [2, 5], 2: [3], 1: [4, 7], 0: [5] } },
+                    { nameAsc: 'First Inversion', nameDesc: 'First Inversion', correctNotes: { 3: [5, 8], 2: [9], 1: [7, 10], 0: [11] } },
+                    { nameAsc: 'Second Inversion', nameDesc: 'Second Inversion', correctNotes: { 3: [8, 14], 2: [12], 1: [10, 16], 0: [14] } },
+                    { nameAsc: 'Root Position (Octave)', nameDesc: 'Root Position (Octave)', correctNotes: { 3: [2, 5], 2: [3], 1: [4, 7], 0: [5] } },
+
+                ])}
+            ]
+        }
+    ];
+
+    let currentKeyIndex = 0;
+    let currentChordInKeyIndex = 0;
+    let currentInversionIndex = 0;
+    let phase = 0; // 0: Ascending through all inversions, 1: Descending through all inversions
+    let currentInversion = null;
+    let linearNoteSequence = [];
+    let currentNoteStepIndex = 0;
+    let selectedNotes = { 0: [], 1: [], 2: [], 3: [] };
+    let isChecked = false;
+
+    const gridEl = document.getElementById('fretboard-grid');
+    const markersOverlayEl = document.getElementById('fret-markers-overlay');
+    const numbersEl = document.getElementById('fret-numbers');
+    const stringLabelsEl = document.getElementById('string-labels');
+    const keyBadgeEl = document.getElementById('key-badge');
+    const keyBadge2El = document.getElementById('key-badge2');
+    const targetNameEl = document.getElementById('target-name');
+    const stringPromptEl = document.getElementById('string-prompt');
+    const progressBarEl = document.getElementById('progress-bar');
+    const nextBtn = document.getElementById('next-btn');
+    const feedbackEl = document.getElementById('feedback');
+    const footerTextEl = document.getElementById('footer-text');
+
+    let score = 0;
+    let streak = 0;
+
+    function getFretWidths() {
+        let rawWidths = [];
+        let totalWeight = 0;
+        let baseSpan = 1000;
+        for (let f = 1; f <= totalFrets; f++) {
+            let w = baseSpan / Math.pow(1.059463, f);
+            rawWidths.push(w);
+            totalWeight += w;
+        }
+        return rawWidths.map(w => `${(w / totalWeight) * 100}%`);
+    }
+
+    const fretWidths = getFretWidths();
+
+    function initFretboard() {
+        gridEl.innerHTML = '';
+        markersOverlayEl.innerHTML = '';
+        numbersEl.innerHTML = '';
+        stringLabelsEl.innerHTML = '';
+
+        const gridTemplate = fretWidths.join(' ');
+        gridEl.style.gridTemplateColumns = gridTemplate;
+        gridEl.style.gridTemplateRows = 'repeat(4, 1fr)';
+
+        markersOverlayEl.style.gridTemplateColumns = gridTemplate;
+        markersOverlayEl.style.gridTemplateRows = 'repeat(4, 1fr)';
+        numbersEl.style.gridTemplateColumns = gridTemplate;
+
+        fretWidths.forEach((w, f) => {
+            const marker = document.createElement('div');
+            marker.className = 'text-center truncate';
+            marker.textContent = f + 1;
+            numbersEl.appendChild(marker);
+        });
+
+        stringNames.forEach((name, stringIdx) => {
+            const labelBtn = document.createElement('div');
+            labelBtn.className = 'h-full flex items-center justify-center w-7 sm:w-10 rounded cursor-pointer transition-all font-bold text-zinc-200 bg-[#1e2330] border border-zinc-700 hover:border-zinc-500 shadow-sm text-xs';
+            labelBtn.textContent = name;
+            labelBtn.id = `string-label-${stringIdx}`;
+            labelBtn.addEventListener('click', () => toggleNote(stringIdx, 0));
+            stringLabelsEl.appendChild(labelBtn);
+        });
+
+        for (let stringIdx = 0; stringIdx < 4; stringIdx++) {
+            for (let fretIdx = 1; fretIdx <= totalFrets; fretIdx++) {
+                const fretBox = document.createElement('div');
+                fretBox.className = 'fret-cell relative z-10 flex items-center justify-center cursor-pointer border-r border-zinc-700';
+
+                const stringThickness = stringIdx === 3 ? 'h-[3.5px]' : stringIdx === 2 ? 'h-[2.5px]' : stringIdx === 1 ? 'h-[2px]' : 'h-[1.5px]';
+                const stringWire = document.createElement('div');
+                stringWire.className = `absolute inset-x-0 inset-y-1/2 -translate-y-1/2 ${stringThickness} bg-zinc-300 z-10 pointer-events-none shadow-sm`;
+                fretBox.appendChild(stringWire);
+
+                fretBox.addEventListener('click', () => toggleNote(stringIdx, fretIdx));
+                fretBox.dataset.string = stringIdx;
+                fretBox.dataset.fret = fretIdx;
+
+                gridEl.appendChild(fretBox);
+            }
+        }
+
+        for (let stringIdx = 0; stringIdx < 4; stringIdx++) {
+            for (let fretIdx = 1; fretIdx <= totalFrets; fretIdx++) {
+                const overlayCell = document.createElement('div');
+                overlayCell.className = 'fret-cell relative flex items-center justify-center pointer-events-none';
+
+                const isSingleDotFret = [3, 5, 7, 9, 15, 17, 19].includes(fretIdx);
+                const isDoubleDotFret = fretIdx === 12;
+
+                if (isSingleDotFret && stringIdx === 1) {
+                    const dot = document.createElement('div');
+                    dot.className = 'absolute dynamic-dot rounded-full bg-zinc-500/80 left-1/2 -translate-x-1/2 top-[100%] -translate-y-1/2';
+                    overlayCell.appendChild(dot);
+                } else if (isDoubleDotFret) {
+                    if (stringIdx === 0) {
+                        const dot = document.createElement('div');
+                        dot.className = 'absolute dynamic-dot rounded-full bg-zinc-500/80 left-1/2 -translate-x-1/2 bottom-1';
+                        overlayCell.appendChild(dot);
+                    } else if (stringIdx === 3) {
+                        const dot = document.createElement('div');
+                        dot.className = 'absolute dynamic-dot rounded-full bg-zinc-500/80 left-1/2 -translate-x-1/2 top-1';
+                        overlayCell.appendChild(dot);
+                    }
+                }
+
+                markersOverlayEl.appendChild(overlayCell);
+            }
+        }
+    }
+
+    function updateProgressBar() {
+        progressBarEl.innerHTML = '';
+        quizKeys.forEach((k, idx) => {
+            const keyBtn = document.createElement('div');
+            keyBtn.textContent = k.keyName.replace(' Major', '');
+            keyBtn.className = 'px-1.5 sm:px-2 py-0.5 rounded border text-center transition-all ';
+            if (idx < currentKeyIndex) {
+                keyBtn.className += 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50';
+            } else if (idx === currentKeyIndex) {
+                keyBtn.className += 'bg-amber-500/20 text-amber-300 border-amber-500 font-bold shadow-sm';
+            } else {
+                keyBtn.className += 'bg-zinc-900 text-zinc-500 border-zinc-800';
+            }
+            progressBarEl.appendChild(keyBtn);
+        });
+    }
+
+    function buildLinearSequence() {
+        let seq = [];
+        const strOrder = [3, 2, 1, 0];
+        strOrder.forEach(s => {
+            let frets = currentInversion.correctNotes[s] || [];
+            frets.sort((a, b) => a - b);
+            frets.forEach(f => {
+                seq.push({ string: s, fret: f });
+            });
+        });
+
+        if (phase === 1) {
+            seq.reverse();
+        }
+        return seq;
+    }
+
+    function isChordTone(stringIdx, fretIdx) {
+        const stringNotes = currentInversion.correctNotes[stringIdx] || [];
+        return stringNotes.includes(fretIdx);
+    }
+
+    function toggleNote(stringIdx, fretIdx) {
+        if (isChecked) return;
+
+        const expectedNote = linearNoteSequence[currentNoteStepIndex];
+
+        if (stringIdx === expectedNote.string && fretIdx === expectedNote.fret) {
+            feedbackEl.textContent = '';
+            if (!selectedNotes[stringIdx].includes(fretIdx)) {
+                selectedNotes[stringIdx].push(fretIdx);
+            }
+            currentNoteStepIndex++;
+
+            if (currentNoteStepIndex < linearNoteSequence.length) {
+                const nextNote = linearNoteSequence[currentNoteStepIndex];
+                stringPromptEl.textContent = `Next Note: ${stringLabels[nextNote.string]} (Fret ${nextNote.fret})`;
+            } else {
+                stringPromptEl.textContent = 'Shape Completed Successfully!';
+            }
+
+            updateFretboardUI();
+
+            if (currentNoteStepIndex === linearNoteSequence.length) {
+                checkAnswer();
+            }
+        } else if (isChordTone(stringIdx, fretIdx)) {
+            feedbackEl.textContent = 'Correct note, but wrong order!';
+            feedbackEl.className = 'text-center text-xs font-semibold text-amber-400 h-4 sm:h-5 tracking-wide font-mono';
+        } else {
+            failReset(`Incorrect note! Expected ${stringLabels[expectedNote.string]} Fret ${expectedNote.fret}. Fretboard reset.`);
+        }
+    }
+
+    function checkAnswer() {
+        isChecked = true;
+        streak++;
+        score += 10;
+        feedbackEl.textContent = 'Correct! Loading next shape...';
+        feedbackEl.className = 'text-center text-xs font-semibold text-emerald-400 h-4 sm:h-5 tracking-wide font-mono';
+
+        updateFretboardUI();
+
+        setTimeout(() => {
+            advanceQuiz();
+        }, 400);
+    }
+
+    function advanceQuiz() {
+        const keyObj = quizKeys[currentKeyIndex];
+        const chordObj = keyObj.chords[currentChordInKeyIndex];
+
+        // Prepare sorted ascending/descending arrays based on hardcoded inversion list
+        let ascendingInversions = [...chordObj.inversions].sort((a, b) => a.lowestE - b.lowestE);
+        let descendingInversions = [...chordObj.inversions].sort((a, b) => b.highestG - a.highestG);
+        const maxInversions = chordObj.inversions.length;
+
+        currentInversionIndex++;
+
+        if (currentInversionIndex >= maxInversions) {
+            currentInversionIndex = 0;
+            phase++;
+
+            if (phase > 1) {
+                phase = 0;
+                currentChordInKeyIndex++;
+
+                if (currentChordInKeyIndex >= keyObj.chords.length) {
+                    currentChordInKeyIndex = 0;
+                    currentKeyIndex++;
+
+                    if (currentKeyIndex >= quizKeys.length) {
+                        feedbackEl.textContent = 'Congratulations! You completed the entire quiz!';
+                        return;
+                    }
+                }
+            }
+        }
+        nextRound();
+    }
+
+    function failReset(message) {
+        streak = 0;
+        feedbackEl.textContent = message;
+        feedbackEl.className = 'text-center text-xs font-semibold text-rose-400 h-4 sm:h-5 tracking-wide font-mono';
+        selectedNotes = { 0: [], 1: [], 2: [], 3: [] };
+        currentNoteStepIndex = 0;
+        const firstNote = linearNoteSequence[0];
+        stringPromptEl.textContent = `Next Note: ${stringLabels[firstNote.string]} (Fret ${firstNote.fret})`;
+        updateFretboardUI();
+    }
+
+    function updateFretboardUI() {
+        const fretBoxes = gridEl.querySelectorAll('.fret-cell');
+        fretBoxes.forEach(box => {
+            const s = parseInt(box.dataset.string);
+            const f = parseInt(box.dataset.fret);
+
+            const nonMarkerElements = Array.from(box.children).filter(el => el.classList.contains('absolute') && el.classList.contains('bg-zinc-300'));
+            box.innerHTML = '';
+            nonMarkerElements.forEach(el => box.appendChild(el));
+
+            if (selectedNotes[s] && selectedNotes[s].includes(f)) {
+                const marker = document.createElement('div');
+                marker.className = 'selected-dot rounded-full bg-emerald-400 text-zinc-950 font-bold text-[10px] flex items-center justify-center z-20 font-mono shadow-md absolute inset-1/2 -translate-x-1/2 -translate-y-1/2';
+                box.appendChild(marker);
+            }
+        });
+
+        for (let s = 0; s < 4; s++) {
+            const labelBtn = document.getElementById(`string-label-${s}`);
+            if (selectedNotes[s] && selectedNotes[s].includes(0)) {
+                labelBtn.className = 'h-full flex items-center justify-center w-7 sm:w-10 rounded cursor-pointer transition-all font-bold text-zinc-950 bg-emerald-400 border border-emerald-400 shadow-md text-xs';
+            } else {
+                labelBtn.className = 'h-full flex items-center justify-center w-7 sm:w-10 rounded cursor-pointer transition-all font-bold text-zinc-200 bg-[#1e2330] border border-zinc-700 hover:border-zinc-500 shadow-sm text-xs';
+            }
+        }
+    }
+
+    function nextRound() {
+        const keyObj = quizKeys[currentKeyIndex];
+        const chordObj = keyObj.chords[currentChordInKeyIndex];
+
+        let ascendingInversions = [...chordObj.inversions].sort((a, b) => a.lowestE - b.lowestE);
+        let descendingInversions = [...chordObj.inversions].sort((a, b) => b.highestG - a.highestG);
+
+        if (phase === 0) {
+            currentInversion = ascendingInversions[currentInversionIndex];
+        } else {
+            currentInversion = descendingInversions[currentInversionIndex];
+        }
+
+        linearNoteSequence = buildLinearSequence();
+
+        keyBadgeEl.textContent = `Key: ${keyObj.keyName} - Triad ${currentChordInKeyIndex + 1}/3`;
+        keyBadge2El.textContent = `${chordObj.chord} - ${phase === 0 ? 'Ascending' : 'Descending'}`;
+
+        targetNameEl.textContent = phase === 1 ? currentInversion.nameDesc : currentInversion.nameAsc ;
+        footerTextEl.textContent = phase === 1
+            ? 'Strict Linear Descending Order: G → D → A → E • 20 Frets'
+            : 'Strict Linear Ascending Order: E → A → D → G • 20 Frets';
+
+        selectedNotes = { 0: [], 1: [], 2: [], 3: [] };
+        currentNoteStepIndex = 0;
+
+        const firstNote = linearNoteSequence[0];
+        stringPromptEl.textContent = `Next Note: ${stringLabels[firstNote.string]} (Fret ${firstNote.fret})`;
+
+        isChecked = false;
+        updateProgressBar();
+        updateFretboardUI();
+    }
+
+    nextBtn.addEventListener('click', nextRound);
+
+    initFretboard();
+    nextRound();
+</script>
+
+</body>
+</html>
