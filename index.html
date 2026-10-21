@@ -10,43 +10,53 @@
             height: 100%;
             margin: 0;
             overflow: hidden;
+            /* Förhindrar studs/skroll på iOS vid drag-gester */
+            position: fixed;
+            width: 100%;
         }
         .fret-cell {
             position: relative;
             box-sizing: border-box;
             transition: background-color 0.15s ease;
             container-type: size;
+            /* Inaktiverar double-tap-to-zoom och tillåter direktrespons vid klick */
+            touch-action: manipulation;
         }
         .fret-cell:hover {
             background-color: rgba(255, 255, 255, 0.05);
         }
+        /* Gjorde prickarna något större på små skärmar */
         .dynamic-dot {
-            width: clamp(4px, 25cqmin, 12px);
-            height: clamp(4px, 25cqmin, 12px);
+            width: clamp(5px, 28cqmin, 12px);
+            height: clamp(5px, 28cqmin, 12px);
         }
         .selected-dot {
-            width: clamp(12px, 58cqmin, 30px);
-            height: clamp(12px, 58cqmin, 30px);
+            width: clamp(14px, 70cqmin, 30px);
+            height: clamp(14px, 70cqmin, 30px);
+        }
+        /* Tvinga fretboard-grid att strunta i zoom-gester */
+        #fretboard-grid {
+            touch-action: none;
         }
     </style>
-</head>
-<body class="bg-[#0d0f12] text-zinc-100 flex flex-col justify-between p-2 sm:p-4 font-sans antialiased selection:bg-zinc-700 selection:text-white h-full overflow-hidden select-none">
 
+</head>
+<body class="bg-[#0d0f12] text-zinc-100 flex flex-col justify-between p-0 sm:p-4 font-sans antialiased selection:bg-zinc-700 selection:text-white h-full overflow-hidden select-none">    <!-- Main Content Card -->
     <!-- Main Content Card -->
-    <main class="w-full max-w-[90rem] mx-auto flex flex-col items-center justify-center flex-grow py-1">
+    <main class="w-full max-w-[90rem] mx-auto flex flex-col items-center justify-center flex-grow py-0">
 
         <!-- Fretboard Container -->
         <div class="w-full flex justify-center my-auto">
-            <div class="bg-[#14171f] p-2 sm:p-4 rounded-xl border border-zinc-800 relative select-none w-full max-w-[98vw] sm:max-w-[95vw]">
+            <div class="bg-[#14171f] p-0 sm:p-4 rounded-none sm:rounded-xl border-x-0 sm:border border-zinc-800 relative select-none w-full max-w-full">
 
                 <!-- Fret Numbers Row -->
-                <div id="fret-numbers" class="grid mb-1 text-[9px] sm:text-xs text-zinc-300 font-mono font-bold select-none ml-7 sm:ml-12">
+                <div id="fret-numbers" class="grid mb-1 text-[10px] sm:text-xs text-zinc-300 font-mono font-bold select-none ml-[32px] sm:ml-12">
                     <!-- Injected via JS -->
                 </div>
 
-                <div class="flex">
+                <div class="flex px-1 sm:px-0">
                     <!-- Interactive String Labels (G, D, A, E) -->
-                    <div id="string-labels" class="flex flex-col justify-around mr-1.5 sm:mr-4 font-mono text-xs sm:text-sm select-none">
+                    <div id="string-labels" class="flex flex-col justify-around mr-0.5 sm:mr-4 font-mono text-xs sm:text-sm select-none">
                         <!-- Injected via JS -->
                     </div>
 
@@ -529,7 +539,8 @@
 
         stringNames.forEach((name, stringIdx) => {
             const labelBtn = document.createElement('div');
-            labelBtn.className = 'h-full flex items-center justify-center w-7 sm:w-10 rounded cursor-pointer transition-all font-bold text-zinc-200 bg-[#1e2330] border border-zinc-700 hover:border-zinc-500 shadow-sm text-xs';
+            // Ändrade w-7 till w-6, la till p-0 och tog bort eventuell standard-margin/padding
+            labelBtn.className = 'h-full flex items-center justify-center w-6 sm:w-10 p-0 rounded cursor-pointer transition-all font-bold text-zinc-200 bg-[#1e2330] border border-zinc-700 hover:border-zinc-500 shadow-sm text-[10px] sm:text-xs select-none';
             labelBtn.textContent = name;
             labelBtn.id = `string-label-${stringIdx}`;
             labelBtn.addEventListener('click', () => toggleNote(stringIdx, 0));
