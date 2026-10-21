@@ -2,7 +2,7 @@
 <html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bass Fretboard Triad Quiz</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -20,7 +20,7 @@
             transition: background-color 0.15s ease;
             container-type: size;
             /* Inaktiverar double-tap-to-zoom och tillåter direktrespons vid klick */
-            touch-action: manipulation;
+            touch-action: pan-y;
         }
         .fret-cell:hover {
             background-color: rgba(255, 255, 255, 0.05);
@@ -36,7 +36,7 @@
         }
         /* Tvinga fretboard-grid att strunta i zoom-gester */
         #fretboard-grid {
-            touch-action: none;
+            touch-action: pan-y;
         }
     </style>
 
