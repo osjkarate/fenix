@@ -7,11 +7,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         html, body {
-            height: 100%;
             margin: 0;
-            overflow: hidden;
-            /* Förhindrar studs/skroll på iOS vid drag-gester */
-            position: fixed;
+            padding: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             width: 100%;
         }
         .fret-cell {
@@ -41,8 +40,7 @@
     </style>
 
 </head>
-<body class="bg-[#0d0f12] text-zinc-100 flex flex-col justify-between p-0 font-sans antialiased selection:bg-zinc-700 selection:text-white h-full overflow-hidden select-none">
-    <!-- Main Content Card -->
+<body class="bg-[#0d0f12] text-zinc-100 flex flex-col justify-between p-4 font-sans antialiased selection:bg-zinc-700 selection:text-white min-h-screen overflow-y-auto">    <!-- Main Content Card -->
     <main class="w-full max-w-[90rem] mx-auto flex flex-col items-center justify-center flex-grow py-0">
 
                 <!-- Key Progress Bar -->
@@ -81,6 +79,9 @@
             </div>
         </div>
 
+        <!-- Feedback Message -->
+        <div id="feedback" class="text-center text-xs sm:text-sm font-medium h-4 sm:h-5 tracking-wide font-mono"></div>
+
                 <!-- Prompt Box -->
         <div class="text-center mb-1 sm:mb-2">
             <p id="key-badge2" class="text-[30px] tracking-widest text-emerald-400 mb-0.5 font-mono font-semibold">Key: C Major</p>
@@ -92,8 +93,7 @@
             Next Note: E String (Fret 0)
         </div>
 
-        <!-- Feedback Message -->
-        <div id="feedback" class="text-center text-xs sm:text-sm font-medium h-4 sm:h-5 tracking-wide font-mono"></div>
+
 
         <!-- Action Buttons -->
         <div class="mt-0.5 flex gap-4">
